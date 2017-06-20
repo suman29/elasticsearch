@@ -75,10 +75,17 @@ class S3Repository extends BlobStoreRepository {
     static final Setting<String> BUCKET_SETTING = Setting.simpleString("bucket");
 
     /**
-     * When set to true files are encrypted on server side using AES256 algorithm.
+     * When set to true files are encrypted on server side.
      * Defaults to false.
      */
     static final Setting<Boolean> SERVER_SIDE_ENCRYPTION_SETTING = Setting.boolSetting("server_side_encryption", false);
+
+    /**
+     * When server_side_encryption is set to true files are encrypted on server side using kms key or AE256 algorithm.
+     * Default AES256 algorithm.
+     */
+    static final Setting<String> SERVER_SIDE_ENCRYPTION_KEY_SETTING = Setting.simpleString("server_side_encryption_key");
+
 
     /**
      * Minimum threshold below which the chunk is uploaded using a single request. Beyond this threshold,
@@ -134,11 +141,16 @@ class S3Repository extends BlobStoreRepository {
         super(metadata, settings, namedXContentRegistry);
 
         String bucket = BUCKET_SETTING.get(metadata.settings());
+
         if (bucket == null) {
             throw new RepositoryException(metadata.name(), "No bucket defined for s3 gateway");
         }
 
         boolean serverSideEncryption = SERVER_SIDE_ENCRYPTION_SETTING.get(metadata.settings());
+        String serverSideEncryptionKey = SERVER_SIDE_ENCRYPTION_KEY_SETTING.get(metadata.settings());
+        if (serverSideEncryptionKey == null) {
+            serverSideEncryptionKey = "";
+        }
         ByteSizeValue bufferSize = BUFFER_SIZE_SETTING.get(metadata.settings());
         this.chunkSize = CHUNK_SIZE_SETTING.get(metadata.settings());
         this.compress = COMPRESS_SETTING.get(metadata.settings());
@@ -153,12 +165,12 @@ class S3Repository extends BlobStoreRepository {
         String storageClass = STORAGE_CLASS_SETTING.get(metadata.settings());
         String cannedACL = CANNED_ACL_SETTING.get(metadata.settings());
 
-        logger.debug("using bucket [{}], chunk_size [{}], server_side_encryption [{}], " +
+        logger.debug("using bucket [{}], chunk_size [{}], server_side_encryption [{}], server_side_encryption_key [{}], " +
             "buffer_size [{}], cannedACL [{}], storageClass [{}]",
-            bucket, chunkSize, serverSideEncryption, bufferSize, cannedACL, storageClass);
+            bucket, chunkSize, serverSideEncryption, serverSideEncryptionKey, bufferSize, cannedACL, storageClass);
 
         AmazonS3 client = s3Service.client(metadata.settings());
-        blobStore = new S3BlobStore(settings, client, bucket, serverSideEncryption, bufferSize, cannedACL, storageClass);
+        blobStore = new S3BlobStore(settings, client, bucket, serverSideEncryption,serverSideEncryptionKey, bufferSize, cannedACL, storageClass);
 
         String basePath = BASE_PATH_SETTING.get(metadata.settings());
         if (Strings.hasLength(basePath)) {
@@ -187,4 +199,5 @@ class S3Repository extends BlobStoreRepository {
     protected ByteSizeValue chunkSize() {
         return chunkSize;
     }
+
 }

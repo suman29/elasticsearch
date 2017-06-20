@@ -42,7 +42,7 @@ public class MockDefaultS3OutputStream extends DefaultS3OutputStream {
     private int numberOfUploadRequests = 0;
 
     public MockDefaultS3OutputStream(int bufferSizeInBytes) {
-        super(null, "test-bucket", "test-blobname", bufferSizeInBytes, false);
+        super(null, "test-bucket", "test-blobname", bufferSizeInBytes, false, null);
     }
 
     @Override
@@ -59,7 +59,7 @@ public class MockDefaultS3OutputStream extends DefaultS3OutputStream {
     }
 
     @Override
-    protected String doInitialize(S3BlobStore blobStore, String bucketName, String blobName, boolean serverSideEncryption) {
+    protected String doInitialize(S3BlobStore blobStore, String bucketName, String blobName, boolean serverSideEncryption, String serverSideEncryptionKey) {
         initialized = true;
         return RandomizedTest.randomAsciiOfLength(50);
     }

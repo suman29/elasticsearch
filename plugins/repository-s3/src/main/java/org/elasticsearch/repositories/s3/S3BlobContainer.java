@@ -112,7 +112,7 @@ class S3BlobContainer extends AbstractBlobContainer {
     private OutputStream createOutput(final String blobName) throws IOException {
         // UploadS3OutputStream does buffering & retry logic internally
         return new DefaultS3OutputStream(blobStore, blobStore.bucket(), buildKey(blobName),
-            blobStore.bufferSizeInBytes(), blobStore.serverSideEncryption());
+            blobStore.bufferSizeInBytes(), blobStore.serverSideEncryption(), blobStore.serverSideEncryptionKey());
     }
 
     @Override
@@ -155,9 +155,7 @@ class S3BlobContainer extends AbstractBlobContainer {
                 blobStore.bucket(), buildKey(targetBlobName));
 
             if (blobStore.serverSideEncryption()) {
-                ObjectMetadata objectMetadata = new ObjectMetadata();
-                objectMetadata.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
-                request.setNewObjectMetadata(objectMetadata);
+                request.withSourceSSECustomerKey(blobStore.getSSEKey());
             }
 
             SocketAccess.doPrivilegedVoid(() -> {
