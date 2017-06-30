@@ -20,11 +20,9 @@
 package org.elasticsearch.repositories.s3;
 
 import com.amazonaws.AmazonClientException;
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.regions.Region;
+import com.amazonaws.SDKGlobalConfiguration;
 import com.amazonaws.regions.Regions;
-import com.amazonaws.services.s3.AmazonS3Client;
-import com.amazonaws.services.s3.model.*;
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
@@ -32,11 +30,11 @@ import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PartETag;
 import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.s3.model.PutObjectResult;
+import com.amazonaws.services.s3.model.SSEAwsKeyManagementParams;
 import com.amazonaws.services.s3.model.UploadPartRequest;
 import com.amazonaws.services.s3.model.UploadPartResult;
-import com.amazonaws.util.Base64;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.unit.ByteSizeUnit;
 import org.elasticsearch.common.unit.ByteSizeValue;
@@ -44,9 +42,6 @@ import org.elasticsearch.common.unit.ByteSizeValue;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -66,6 +61,11 @@ import java.util.List;
  * See http://docs.aws.amazon.com/AmazonS3/latest/dev/qfacts.html
  * See http://docs.aws.amazon.com/AmazonS3/latest/dev/uploadobjusingmpu.html
  */
+
+/**
+ * Set system property ENFORCE_S3_SIGV4_SYSTEM_PROPERTY to true
+ */
+@SuppressForbidden(reason = "This guarantees that the more secure authentication protocol will be used")
 class DefaultS3OutputStream extends S3OutputStream {
 
     private static final ByteSizeValue MULTIPART_MAX_SIZE = new ByteSizeValue(5, ByteSizeUnit.GB);
@@ -77,7 +77,9 @@ class DefaultS3OutputStream extends S3OutputStream {
     private int multipartChunks;
     private List<PartETag> multiparts;
 
-    DefaultS3OutputStream(S3BlobStore blobStore, String bucketName, String blobName, int bufferSizeInBytes, boolean serverSideEncryption, String serverSideEncryptionKey) {
+    DefaultS3OutputStream(S3BlobStore blobStore, String bucketName, String blobName, int bufferSizeInBytes,
+                          boolean serverSideEncryption, String serverSideEncryptionKey) {
+
         super(blobStore, bucketName, blobName, bufferSizeInBytes, serverSideEncryption, serverSideEncryptionKey);
     }
 
@@ -119,50 +121,35 @@ class DefaultS3OutputStream extends S3OutputStream {
         }
     }
 
-    protected void doUpload(S3BlobStore blobStore, String bucketName, String blobName, InputStream is, int length, boolean serverSideEncryption) throws AmazonS3Exception {
-        AmazonS3Client s3 = new AmazonS3Client(new ProfileCredentialsProvider())
-            .withRegion(Region.getRegion(Regions.US_EAST_1));
-
+    protected void doUpload(S3BlobStore blobStore, String bucketName, String blobName, InputStream is, int length,
+                            boolean serverSideEncryption) throws AmazonS3Exception {
+        AmazonS3 s3Client = blobStore.client();
         ObjectMetadata md = new ObjectMetadata();
         md.setContentLength(length);
-
-        // We try to compute a MD5 while reading it
-        MessageDigest messageDigest;
-        InputStream inputStream;
-        try {
-            messageDigest = MessageDigest.getInstance("MD5");
-            inputStream = new DigestInputStream(is, messageDigest);
-        } catch (NoSuchAlgorithmException impossible) {
-            // Every implementation of the Java platform is required to support MD5 (see MessageDigest)
-            throw new RuntimeException(impossible);
-        }
-
-        PutObjectRequest putRequest = new PutObjectRequest(bucketName, blobName, inputStream, md)
-                .withStorageClass(blobStore.getStorageClass())
-                .withCannedAcl(blobStore.getCannedACL());
+        PutObjectRequest putRequest = new PutObjectRequest(bucketName, blobName, is, md)
+            .withStorageClass(blobStore.getStorageClass())
+            .withCannedAcl(blobStore.getCannedACL());
 
         if (serverSideEncryption) {
-//            putRequest.withSSECustomerKey(blobStore.getSSEKey())
-            putRequest.withSSEAwsKeyManagementParams(new SSEAwsKeyManagementParams(blobStore.serverSideEncryptionKey()));
+            if (blobStore.serverSideEncryptionKey().isEmpty()) {
+                md.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
+            } else {
+                /** This guarantees that the more secure authentication protocol will
+                 *  be used, but will cause authentication failures in code that
+                 *  accesses buckets in regions other than US Standard without explicitly
+                 *  configuring a region. **/
+                System.setProperty(SDKGlobalConfiguration.ENFORCE_S3_SIGV4_SYSTEM_PROPERTY, "true");
+                putRequest.setSSEAwsKeyManagementParams(new SSEAwsKeyManagementParams(blobStore.serverSideEncryptionKey()));
+            }
         }
-//        PutObjectResult putObjectResult = s3.putObject(putRequest);
-
-        PutObjectResult putObjectResult = blobStore.client().putObject(putRequest);
-
-
-        String localMd5 = Base64.encodeAsString(messageDigest.digest());
-        String remoteMd5 = putObjectResult.getContentMd5();
-        if (!localMd5.equals(remoteMd5)) {
-            logger.debug("MD5 local [{}], remote [{}] are not equal...", localMd5, remoteMd5);
-            throw new AmazonS3Exception("MD5 local [" + localMd5 +
-                    "], remote [" + remoteMd5 +
-                    "] are not equal...");
-        }
+        s3Client.setRegion(Regions.getCurrentRegion());
+        s3Client.putObject(putRequest);
     }
 
     private void initializeMultipart() {
         while (multipartId == null) {
-            multipartId = doInitialize(getBlobStore(), getBucketName(), getBlobName(), isServerSideEncryption(), getServerSideEncryptionKey());
+            multipartId = doInitialize(getBlobStore(), getBucketName(), getBlobName(), isServerSideEncryption(),
+                getServerSideEncryptionKey());
             if (multipartId != null) {
                 multipartChunks = 1;
                 multiparts = new ArrayList<>();
@@ -170,22 +157,30 @@ class DefaultS3OutputStream extends S3OutputStream {
         }
     }
 
-    protected String doInitialize(S3BlobStore blobStore, String bucketName, String blobName, boolean serverSideEncryption, String serverSideEncryptionKey) {
-//        AmazonS3Client s3Client = new AmazonS3Client(new ProfileCredentialsProvider())
-//            .withRegion(Region.getRegion(Regions.US_EAST_1));
-//        blobStore.client().setS3ClientOptions();
-
+    protected String doInitialize(S3BlobStore blobStore, String bucketName, String blobName,
+                                  boolean serverSideEncryption, String serverSideEncryptionKey) {
+        AmazonS3 s3Client = blobStore.client();
         InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(bucketName, blobName)
-                .withCannedACL(blobStore.getCannedACL())
-                .withStorageClass(blobStore.getStorageClass());
+            .withCannedACL(blobStore.getCannedACL())
+            .withStorageClass(blobStore.getStorageClass());
 
         if (serverSideEncryption) {
-//            request.withSSECustomerKey(blobStore.getSSEKey());
-            request.withSSEAwsKeyManagementParams(new SSEAwsKeyManagementParams(blobStore.serverSideEncryptionKey()));
+            ObjectMetadata md = new ObjectMetadata();
+            if (blobStore.serverSideEncryptionKey().isEmpty()) {
+                md.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
+            } else {
+                /** This guarantees that the more secure authentication protocol will
+                 *  be used, but will cause authentication failures in code that
+                 *  accesses buckets in regions other than US Standard without explicitly
+                 *  configuring a region. **/
+                System.setProperty(SDKGlobalConfiguration.ENFORCE_S3_SIGV4_SYSTEM_PROPERTY, "true");
+                request.setSSEAwsKeyManagementParams(new SSEAwsKeyManagementParams(blobStore.serverSideEncryptionKey()));
+            }
+            request.setObjectMetadata(md);
         }
 
-//        return s3Client.initiateMultipartUpload(request).getUploadId();
-        return blobStore.client().initiateMultipartUpload(request).getUploadId();
+        s3Client.setRegion(Regions.getCurrentRegion());
+        return s3Client.initiateMultipartUpload(request).getUploadId();
     }
 
     private void uploadMultipart(byte[] bytes, int off, int len, boolean lastPart) throws IOException {
@@ -202,15 +197,15 @@ class DefaultS3OutputStream extends S3OutputStream {
     }
 
     protected PartETag doUploadMultipart(S3BlobStore blobStore, String bucketName, String blobName, String uploadId, InputStream is,
-            int length, boolean lastPart) throws AmazonS3Exception {
+                                         int length, boolean lastPart) throws AmazonS3Exception {
         UploadPartRequest request = new UploadPartRequest()
-        .withBucketName(bucketName)
-        .withKey(blobName)
-        .withUploadId(uploadId)
-        .withPartNumber(multipartChunks)
-        .withInputStream(is)
-        .withPartSize(length)
-        .withLastPart(lastPart);
+            .withBucketName(bucketName)
+            .withKey(blobName)
+            .withUploadId(uploadId)
+            .withPartNumber(multipartChunks)
+            .withInputStream(is)
+            .withPartSize(length)
+            .withLastPart(lastPart);
 
         UploadPartResult response = blobStore.client().uploadPart(request);
         return response.getPartETag();
@@ -229,7 +224,7 @@ class DefaultS3OutputStream extends S3OutputStream {
     }
 
     protected void doCompleteMultipart(S3BlobStore blobStore, String bucketName, String blobName, String uploadId, List<PartETag> parts)
-            throws AmazonS3Exception {
+        throws AmazonS3Exception {
         CompleteMultipartUploadRequest request = new CompleteMultipartUploadRequest(bucketName, blobName, uploadId, parts);
         blobStore.client().completeMultipartUpload(request);
     }
@@ -245,7 +240,7 @@ class DefaultS3OutputStream extends S3OutputStream {
     }
 
     protected void doAbortMultipart(S3BlobStore blobStore, String bucketName, String blobName, String uploadId)
-            throws AmazonS3Exception {
+        throws AmazonS3Exception {
         blobStore.client().abortMultipartUpload(new AbortMultipartUploadRequest(bucketName, blobName, uploadId));
     }
 }

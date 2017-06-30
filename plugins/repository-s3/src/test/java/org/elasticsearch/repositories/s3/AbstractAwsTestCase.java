@@ -44,11 +44,11 @@ public abstract class AbstractAwsTestCase extends ESIntegTestCase {
     @Override
     protected Settings nodeSettings(int nodeOrdinal) {
         Settings.Builder settings = Settings.builder()
-                .put(super.nodeSettings(nodeOrdinal))
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())
-                .put("cloud.aws.test.random", randomInt())
-                .put("cloud.aws.test.write_failures", 0.1)
-                .put("cloud.aws.test.read_failures", 0.1);
+            .put(super.nodeSettings(nodeOrdinal))
+            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())
+            .put("cloud.aws.test.random", randomInt())
+            .put("cloud.aws.test.write_failures", 0.1)
+            .put("cloud.aws.test.read_failures", 0.1);
 
         // if explicit, just load it and don't load from env
         try {

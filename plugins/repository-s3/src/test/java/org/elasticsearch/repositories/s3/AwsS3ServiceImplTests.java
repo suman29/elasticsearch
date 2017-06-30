@@ -24,8 +24,6 @@ import com.amazonaws.Protocol;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import org.elasticsearch.common.settings.MockSecureSettings;
-import org.elasticsearch.common.settings.SecureSetting;
-import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESTestCase;
 
@@ -131,15 +129,15 @@ public class AwsS3ServiceImplTests extends ESTestCase {
     }
 
     private void launchAWSConfigurationTest(Settings settings,
-                                              Settings singleRepositorySettings,
-                                              Protocol expectedProtocol,
-                                              String expectedProxyHost,
-                                              int expectedProxyPort,
-                                              String expectedProxyUsername,
-                                              String expectedProxyPassword,
-                                              Integer expectedMaxRetries,
-                                              boolean expectedUseThrottleRetries,
-                                              int expectedReadTimeout) {
+                                            Settings singleRepositorySettings,
+                                            Protocol expectedProtocol,
+                                            String expectedProxyHost,
+                                            int expectedProxyPort,
+                                            String expectedProxyUsername,
+                                            String expectedProxyPassword,
+                                            Integer expectedMaxRetries,
+                                            boolean expectedUseThrottleRetries,
+                                            int expectedReadTimeout) {
 
         S3ClientSettings clientSettings = S3ClientSettings.getClientSettings(settings, "default");
         ClientConfiguration configuration = InternalAwsS3Service.buildConfiguration(clientSettings, singleRepositorySettings);

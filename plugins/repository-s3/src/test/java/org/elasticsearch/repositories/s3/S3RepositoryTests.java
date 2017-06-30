@@ -19,8 +19,6 @@
 
 package org.elasticsearch.repositories.s3;
 
-import java.io.IOException;
-
 import com.amazonaws.services.s3.AbstractAmazonS3;
 import com.amazonaws.services.s3.AmazonS3;
 import org.elasticsearch.cluster.metadata.RepositoryMetaData;
@@ -33,32 +31,11 @@ import org.elasticsearch.repositories.RepositoryException;
 import org.elasticsearch.test.ESTestCase;
 import org.hamcrest.Matchers;
 
+import java.io.IOException;
+
 import static org.hamcrest.Matchers.containsString;
 
 public class S3RepositoryTests extends ESTestCase {
-
-    private static class DummyS3Client extends AbstractAmazonS3 {
-        @Override
-        public boolean doesBucketExist(String bucketName) {
-            return true;
-        }
-    }
-
-    private static class DummyS3Service extends AbstractLifecycleComponent implements AwsS3Service {
-        DummyS3Service() {
-            super(Settings.EMPTY);
-        }
-        @Override
-        protected void doStart() {}
-        @Override
-        protected void doStop() {}
-        @Override
-        protected void doClose() {}
-        @Override
-        public AmazonS3 client(Settings settings) {
-            return new DummyS3Client();
-        }
-    }
 
     public void testInvalidChunkBufferSizeSettings() throws IOException {
         // chunk < buffer should fail
@@ -103,5 +80,35 @@ public class S3RepositoryTests extends ESTestCase {
         ByteSizeValue defaultBufferSize = S3Repository.BUFFER_SIZE_SETTING.get(Settings.EMPTY);
         assertThat(defaultBufferSize, Matchers.lessThanOrEqualTo(new ByteSizeValue(100, ByteSizeUnit.MB)));
         assertThat(defaultBufferSize, Matchers.greaterThanOrEqualTo(new ByteSizeValue(5, ByteSizeUnit.MB)));
+    }
+
+    private static class DummyS3Client extends AbstractAmazonS3 {
+        @Override
+        public boolean doesBucketExist(String bucketName) {
+            return true;
+        }
+    }
+
+    private static class DummyS3Service extends AbstractLifecycleComponent implements AwsS3Service {
+        DummyS3Service() {
+            super(Settings.EMPTY);
+        }
+
+        @Override
+        protected void doStart() {
+        }
+
+        @Override
+        protected void doStop() {
+        }
+
+        @Override
+        protected void doClose() {
+        }
+
+        @Override
+        public AmazonS3 client(Settings settings) {
+            return new DummyS3Client();
+        }
     }
 }

@@ -22,7 +22,6 @@ package org.elasticsearch.repositories.s3;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.StorageClass;
 import org.elasticsearch.common.blobstore.BlobStoreException;
-import org.elasticsearch.repositories.s3.S3BlobStore;
 import org.elasticsearch.test.ESTestCase;
 
 import java.io.IOException;
@@ -32,8 +31,8 @@ import static org.hamcrest.Matchers.equalTo;
 public class S3BlobStoreTests extends ESTestCase {
     public void testInitCannedACL() throws IOException {
         String[] aclList = new String[]{
-                "private", "public-read", "public-read-write", "authenticated-read",
-                "log-delivery-write", "bucket-owner-read", "bucket-owner-full-control"};
+            "private", "public-read", "public-read-write", "authenticated-read",
+            "log-delivery-write", "bucket-owner-read", "bucket-owner-full-control"};
 
         //empty acl
         assertThat(S3BlobStore.initCannedACL(null), equalTo(CannedAccessControlList.Private));
@@ -81,7 +80,7 @@ public class S3BlobStoreTests extends ESTestCase {
     public void testInvalidStorageClass() throws IOException {
         try {
             S3BlobStore.initStorageClass("whatever");
-        } catch(BlobStoreException ex) {
+        } catch (BlobStoreException ex) {
             assertThat(ex.getMessage(), equalTo("`whatever` is not a valid S3 Storage Class."));
         }
     }
@@ -89,7 +88,7 @@ public class S3BlobStoreTests extends ESTestCase {
     public void testRejectGlacierStorageClass() throws IOException {
         try {
             S3BlobStore.initStorageClass("glacier");
-        } catch(BlobStoreException ex) {
+        } catch (BlobStoreException ex) {
             assertThat(ex.getMessage(), equalTo("Glacier storage class is not supported"));
         }
     }

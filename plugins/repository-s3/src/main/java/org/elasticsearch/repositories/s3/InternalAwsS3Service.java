@@ -19,10 +19,6 @@
 
 package org.elasticsearch.repositories.s3;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Function;
-
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSCredentialsProvider;
@@ -41,6 +37,10 @@ import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+
 
 class InternalAwsS3Service extends AbstractLifecycleComponent implements AwsS3Service {
 
@@ -54,35 +54,6 @@ class InternalAwsS3Service extends AbstractLifecycleComponent implements AwsS3Se
     InternalAwsS3Service(Settings settings, Map<String, S3ClientSettings> clientsSettings) {
         super(settings);
         this.clientsSettings = clientsSettings;
-    }
-
-    @Override
-    public synchronized AmazonS3 client(Settings repositorySettings) {
-        String clientName = CLIENT_NAME.get(repositorySettings);
-        AmazonS3Client client = clientsCache.get(clientName);
-        if (client != null) {
-            return client;
-        }
-
-        S3ClientSettings clientSettings = clientsSettings.get(clientName);
-        if (clientSettings == null) {
-            throw new IllegalArgumentException("Unknown s3 client name [" + clientName + "]. Existing client configs: " +
-                Strings.collectionToDelimitedString(clientsSettings.keySet(), ","));
-        }
-
-        logger.debug("creating S3 client with client_name [{}], endpoint [{}]", clientName, clientSettings.endpoint);
-
-        AWSCredentialsProvider credentials = buildCredentials(logger, deprecationLogger, clientSettings, repositorySettings);
-        ClientConfiguration configuration = buildConfiguration(clientSettings, repositorySettings);
-
-        client = new AmazonS3Client(credentials, configuration);
-
-        if (Strings.hasText(clientSettings.endpoint)) {
-            client.setEndpoint(clientSettings.endpoint);
-        }
-
-        clientsCache.put(clientName, client);
-        return client;
     }
 
     // pkg private for tests
@@ -139,12 +110,43 @@ class InternalAwsS3Service extends AbstractLifecycleComponent implements AwsS3Se
         }
     }
 
-    /** Returns the value for a given setting from the repository, or returns the fallback value. */
+    /**
+     * Returns the value for a given setting from the repository, or returns the fallback value.
+     */
     private static <T> T getRepoValue(Settings repositorySettings, Setting<T> repositorySetting, T fallback) {
         if (repositorySetting.exists(repositorySettings)) {
             return repositorySetting.get(repositorySettings);
         }
         return fallback;
+    }
+
+    @Override
+    public synchronized AmazonS3 client(Settings repositorySettings) {
+        String clientName = CLIENT_NAME.get(repositorySettings);
+        AmazonS3Client client = clientsCache.get(clientName);
+        if (client != null) {
+            return client;
+        }
+
+        S3ClientSettings clientSettings = clientsSettings.get(clientName);
+        if (clientSettings == null) {
+            throw new IllegalArgumentException("Unknown s3 client name [" + clientName + "]. Existing client configs: " +
+                Strings.collectionToDelimitedString(clientsSettings.keySet(), ","));
+        }
+
+        logger.debug("creating S3 client with client_name [{}], endpoint [{}]", clientName, clientSettings.endpoint);
+
+        AWSCredentialsProvider credentials = buildCredentials(logger, deprecationLogger, clientSettings, repositorySettings);
+        ClientConfiguration configuration = buildConfiguration(clientSettings, repositorySettings);
+
+        client = new AmazonS3Client(credentials, configuration);
+
+        if (Strings.hasText(clientSettings.endpoint)) {
+            client.setEndpoint(clientSettings.endpoint);
+        }
+
+        clientsCache.put(clientName, client);
+        return client;
     }
 
     @Override

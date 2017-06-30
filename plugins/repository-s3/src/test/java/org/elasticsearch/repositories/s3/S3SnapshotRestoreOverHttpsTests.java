@@ -25,8 +25,8 @@ public class S3SnapshotRestoreOverHttpsTests extends AbstractS3SnapshotRestoreTe
     @Override
     public Settings nodeSettings(int nodeOrdinal) {
         Settings.Builder settings = Settings.builder()
-                .put(super.nodeSettings(nodeOrdinal))
-                .put("cloud.aws.s3.protocol", "https");
+            .put(super.nodeSettings(nodeOrdinal))
+            .put("cloud.aws.s3.protocol", "https");
         return settings.build();
     }
 }

@@ -20,8 +20,13 @@
 package org.elasticsearch.repositories.s3;
 
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.*;
+import com.amazonaws.services.s3.model.CannedAccessControlList;
+import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest.KeyVersion;
+import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.model.SSEAwsKeyManagementParams;
+import com.amazonaws.services.s3.model.StorageClass;
 import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.blobstore.BlobPath;
 import org.elasticsearch.common.blobstore.BlobStore;
@@ -70,9 +75,43 @@ class S3BlobStore extends AbstractComponent implements BlobStore {
         SocketAccess.doPrivilegedVoid(() -> {
             if (client.doesBucketExist(bucket) == false) {
                 throw new IllegalArgumentException("The bucket [" + bucket + "] does not exist. Please create it before " +
-                                                   " creating an s3 snapshot repository backed by it.");
+                    " creating an s3 snapshot repository backed by it.");
             }
         });
+    }
+
+    public static StorageClass initStorageClass(String storageClass) {
+        if (storageClass == null || storageClass.equals("")) {
+            return StorageClass.Standard;
+        }
+
+        try {
+            StorageClass _storageClass = StorageClass.fromValue(storageClass.toUpperCase(Locale.ENGLISH));
+            if (_storageClass.equals(StorageClass.Glacier)) {
+                throw new BlobStoreException("Glacier storage class is not supported");
+            }
+
+            return _storageClass;
+        } catch (IllegalArgumentException illegalArgumentException) {
+            throw new BlobStoreException("`" + storageClass + "` is not a valid S3 Storage Class.");
+        }
+    }
+
+    /**
+     * Constructs canned acl from string
+     */
+    public static CannedAccessControlList initCannedACL(String cannedACL) {
+        if (cannedACL == null || cannedACL.equals("")) {
+            return CannedAccessControlList.Private;
+        }
+
+        for (CannedAccessControlList cur : CannedAccessControlList.values()) {
+            if (cur.toString().equalsIgnoreCase(cannedACL)) {
+                return cur;
+            }
+        }
+
+        throw new BlobStoreException("cannedACL is not valid: [" + cannedACL + "]");
     }
 
     @Override
@@ -96,8 +135,8 @@ class S3BlobStore extends AbstractComponent implements BlobStore {
         return serverSideEncryptionKey;
     }
 
-    public SSECustomerKey getSSEKey(){
-        return  new SSECustomerKey(serverSideEncryptionKey);
+    public SSEAwsKeyManagementParams getSSEAwsKey() {
+        return new SSEAwsKeyManagementParams(serverSideEncryptionKey);
     }
 
     public int bufferSizeInBytes() {
@@ -158,39 +197,7 @@ class S3BlobStore extends AbstractComponent implements BlobStore {
         return cannedACL;
     }
 
-    public StorageClass getStorageClass() { return storageClass; }
-
-    public static StorageClass initStorageClass(String storageClass) {
-        if (storageClass == null || storageClass.equals("")) {
-            return StorageClass.Standard;
-        }
-
-        try {
-            StorageClass _storageClass = StorageClass.fromValue(storageClass.toUpperCase(Locale.ENGLISH));
-            if (_storageClass.equals(StorageClass.Glacier)) {
-                throw new BlobStoreException("Glacier storage class is not supported");
-            }
-
-            return _storageClass;
-        } catch (IllegalArgumentException illegalArgumentException) {
-            throw new BlobStoreException("`" + storageClass + "` is not a valid S3 Storage Class.");
-        }
-    }
-
-    /**
-     * Constructs canned acl from string
-     */
-    public static CannedAccessControlList initCannedACL(String cannedACL) {
-        if (cannedACL == null || cannedACL.equals("")) {
-            return CannedAccessControlList.Private;
-        }
-
-        for (CannedAccessControlList cur : CannedAccessControlList.values()) {
-            if (cur.toString().equalsIgnoreCase(cannedACL)) {
-                return cur;
-            }
-        }
-
-        throw new BlobStoreException("cannedACL is not valid: [" + cannedACL + "]");
+    public StorageClass getStorageClass() {
+        return storageClass;
     }
 }

@@ -21,6 +21,7 @@ package org.elasticsearch.repositories.s3;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
+import com.amazonaws.regions.Region;
 import com.amazonaws.services.s3.AbstractAmazonS3;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
@@ -36,11 +37,9 @@ import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectInputStream;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.amazonaws.util.Base64;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.security.DigestInputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +53,8 @@ class MockAmazonS3 extends AbstractAmazonS3 {
     // length of the input data is 100 bytes
     private byte[] byteCounter = new byte[100];
 
+    private Region region;
+
     @Override
     public boolean doesBucketExist(String bucket) {
         return true;
@@ -61,8 +62,8 @@ class MockAmazonS3 extends AbstractAmazonS3 {
 
     @Override
     public ObjectMetadata getObjectMetadata(
-            GetObjectMetadataRequest getObjectMetadataRequest)
-            throws AmazonClientException, AmazonServiceException {
+        GetObjectMetadataRequest getObjectMetadataRequest)
+        throws AmazonClientException, AmazonServiceException {
         String blobName = getObjectMetadataRequest.getKey();
 
         if (!blobs.containsKey(blobName)) {
@@ -74,27 +75,24 @@ class MockAmazonS3 extends AbstractAmazonS3 {
 
     @Override
     public PutObjectResult putObject(PutObjectRequest putObjectRequest)
-            throws AmazonClientException, AmazonServiceException {
+        throws AmazonClientException, AmazonServiceException {
         String blobName = putObjectRequest.getKey();
-        DigestInputStream stream = (DigestInputStream) putObjectRequest.getInputStream();
-
         if (blobs.containsKey(blobName)) {
             throw new AmazonS3Exception("[" + blobName + "] already exists.");
         }
-
-        blobs.put(blobName, stream);
-
-        // input and output md5 hashes need to match to avoid an exception
-        String md5 = Base64.encodeAsString(stream.getMessageDigest().digest());
-        PutObjectResult result = new PutObjectResult();
-        result.setContentMd5(md5);
-
-        return result;
+        blobs.put(blobName, putObjectRequest.getInputStream());
+        return new PutObjectResult();
     }
 
     @Override
+    public void setRegion(Region region) throws AmazonClientException, AmazonServiceException {
+        this.region = region;
+    }
+
+
+    @Override
     public S3Object getObject(GetObjectRequest getObjectRequest)
-            throws AmazonClientException, AmazonServiceException {
+        throws AmazonClientException, AmazonServiceException {
         // in ESBlobStoreContainerTestCase.java, the prefix is empty,
         // so the key and blobName are equivalent to each other
         String blobName = getObjectRequest.getKey();
@@ -105,7 +103,7 @@ class MockAmazonS3 extends AbstractAmazonS3 {
 
         // the HTTP request attribute is irrelevant for reading
         S3ObjectInputStream stream = new S3ObjectInputStream(
-                blobs.get(blobName), null, false);
+            blobs.get(blobName), null, false);
         S3Object s3Object = new S3Object();
         s3Object.setObjectContent(stream);
         return s3Object;
@@ -113,7 +111,7 @@ class MockAmazonS3 extends AbstractAmazonS3 {
 
     @Override
     public ObjectListing listObjects(ListObjectsRequest listObjectsRequest)
-            throws AmazonClientException, AmazonServiceException {
+        throws AmazonClientException, AmazonServiceException {
         MockObjectListing list = new MockObjectListing();
         list.setTruncated(false);
 
@@ -133,7 +131,7 @@ class MockAmazonS3 extends AbstractAmazonS3 {
                     objectSummary.setSize(getSize(blob.getValue()));
                 } catch (IOException e) {
                     throw new AmazonS3Exception("Object listing " +
-                            "failed for blob [" + blob.getKey() + "]");
+                        "failed for blob [" + blob.getKey() + "]");
                 }
 
                 mockObjectSummaries.add(objectSummary);
@@ -146,18 +144,18 @@ class MockAmazonS3 extends AbstractAmazonS3 {
 
     @Override
     public CopyObjectResult copyObject(CopyObjectRequest copyObjectRequest)
-            throws AmazonClientException, AmazonServiceException {
+        throws AmazonClientException, AmazonServiceException {
         String sourceBlobName = copyObjectRequest.getSourceKey();
         String targetBlobName = copyObjectRequest.getDestinationKey();
 
         if (!blobs.containsKey(sourceBlobName)) {
             throw new AmazonS3Exception("Source blob [" +
-                    sourceBlobName + "] does not exist.");
+                sourceBlobName + "] does not exist.");
         }
 
         if (blobs.containsKey(targetBlobName)) {
             throw new AmazonS3Exception("Target blob [" +
-                    targetBlobName + "] already exists.");
+                targetBlobName + "] already exists.");
         }
 
         blobs.put(targetBlobName, blobs.get(sourceBlobName));
@@ -166,7 +164,7 @@ class MockAmazonS3 extends AbstractAmazonS3 {
 
     @Override
     public void deleteObject(DeleteObjectRequest deleteObjectRequest)
-            throws AmazonClientException, AmazonServiceException {
+        throws AmazonClientException, AmazonServiceException {
         String blobName = deleteObjectRequest.getKey();
 
         if (!blobs.containsKey(blobName)) {

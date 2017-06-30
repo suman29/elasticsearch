@@ -47,13 +47,17 @@ import static com.carrotsearch.randomizedtesting.RandomizedTest.randomDouble;
 public class TestAmazonS3 extends AmazonS3Wrapper {
 
     protected final Logger logger = Loggers.getLogger(getClass());
-
+    ConcurrentMap<String, AtomicLong> accessCounts = new ConcurrentHashMap<String, AtomicLong>();
     private double writeFailureRate = 0.0;
     private double readFailureRate = 0.0;
-
     private String randomPrefix;
 
-    ConcurrentMap<String, AtomicLong> accessCounts = new ConcurrentHashMap<String, AtomicLong>();
+    public TestAmazonS3(AmazonS3 delegate, Settings settings) {
+        super(delegate);
+        randomPrefix = settings.get("cloud.aws.test.random");
+        writeFailureRate = settings.getAsDouble("cloud.aws.test.write_failures", 0.0);
+        readFailureRate = settings.getAsDouble("cloud.aws.test.read_failures", 0.0);
+    }
 
     private long incrementAndGet(String path) {
         AtomicLong value = accessCounts.get(path);
@@ -64,13 +68,6 @@ public class TestAmazonS3 extends AmazonS3Wrapper {
             return value.incrementAndGet();
         }
         return 1;
-    }
-
-    public TestAmazonS3(AmazonS3 delegate, Settings settings) {
-        super(delegate);
-        randomPrefix = settings.get("cloud.aws.test.random");
-        writeFailureRate = settings.getAsDouble("cloud.aws.test.write_failures", 0.0);
-        readFailureRate = settings.getAsDouble("cloud.aws.test.read_failures", 0.0);
     }
 
     @Override
@@ -103,7 +100,7 @@ public class TestAmazonS3 extends AmazonS3Wrapper {
             long partToRead = (long) (length * randomDouble());
             byte[] buffer = new byte[1024];
             for (long cur = 0; cur < partToRead; cur += buffer.length) {
-                try (InputStream input = request.getInputStream()){
+                try (InputStream input = request.getInputStream()) {
                     input.read(buffer, 0, (int) (partToRead - cur > buffer.length ? buffer.length : partToRead - cur));
                 } catch (IOException ex) {
                     throw new ElasticsearchException("cannot read input stream", ex);
@@ -147,7 +144,7 @@ public class TestAmazonS3 extends AmazonS3Wrapper {
             byte[] bytes = digest.digest(path.getBytes("UTF-8"));
             int i = 0;
             return ((bytes[i++] & 0xFF) << 24) | ((bytes[i++] & 0xFF) << 16)
-                    | ((bytes[i++] & 0xFF) << 8) | (bytes[i++] & 0xFF);
+                | ((bytes[i++] & 0xFF) << 8) | (bytes[i++] & 0xFF);
         } catch (UnsupportedEncodingException ex) {
             throw new ElasticsearchException("cannot calculate hashcode", ex);
         } catch (NoSuchAlgorithmException ex) {

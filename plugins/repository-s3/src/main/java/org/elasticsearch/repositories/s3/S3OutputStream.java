@@ -48,7 +48,8 @@ abstract class S3OutputStream extends OutputStream {
 
     private int flushCount = 0;
 
-    S3OutputStream(S3BlobStore blobStore, String bucketName, String blobName, int bufferSizeInBytes, boolean serverSideEncryption, String serverSideEncryptionKey) {
+    S3OutputStream(S3BlobStore blobStore, String bucketName, String blobName, int bufferSizeInBytes,
+                   boolean serverSideEncryption, String serverSideEncryptionKey) {
         this.blobStore = blobStore;
         this.bucketName = bucketName;
         this.blobName = blobName;

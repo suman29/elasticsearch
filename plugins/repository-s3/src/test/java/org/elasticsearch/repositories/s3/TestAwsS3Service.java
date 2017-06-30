@@ -19,24 +19,13 @@
 
 package org.elasticsearch.repositories.s3;
 
-import java.util.IdentityHashMap;
-
 import com.amazonaws.services.s3.AmazonS3;
 import org.elasticsearch.ElasticsearchException;
-import org.elasticsearch.cluster.metadata.RepositoryMetaData;
 import org.elasticsearch.common.settings.Settings;
 
-public class TestAwsS3Service extends InternalAwsS3Service {
-    public static class TestPlugin extends S3RepositoryPlugin {
-        public TestPlugin(Settings settings) {
-            super(settings);
-        }
-        @Override
-        protected AwsS3Service createStorageService(Settings settings) {
-            return new TestAwsS3Service(settings);
-        }
-    }
+import java.util.IdentityHashMap;
 
+public class TestAwsS3Service extends InternalAwsS3Service {
     IdentityHashMap<AmazonS3, TestAmazonS3> clients = new IdentityHashMap<>();
 
     public TestAwsS3Service(Settings settings) {
@@ -61,6 +50,17 @@ public class TestAwsS3Service extends InternalAwsS3Service {
     protected synchronized void doClose() throws ElasticsearchException {
         super.doClose();
         clients.clear();
+    }
+
+    public static class TestPlugin extends S3RepositoryPlugin {
+        public TestPlugin(Settings settings) {
+            super(settings);
+        }
+
+        @Override
+        protected AwsS3Service createStorageService(Settings settings) {
+            return new TestAwsS3Service(settings);
+        }
     }
 
 

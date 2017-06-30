@@ -27,6 +27,7 @@ import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.model.SSEAlgorithm;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.blobstore.BlobMetaData;
 import org.elasticsearch.common.blobstore.BlobPath;
@@ -155,7 +156,14 @@ class S3BlobContainer extends AbstractBlobContainer {
                 blobStore.bucket(), buildKey(targetBlobName));
 
             if (blobStore.serverSideEncryption()) {
-                request.withSourceSSECustomerKey(blobStore.getSSEKey());
+                ObjectMetadata objectMetadata = new ObjectMetadata();
+                if (blobStore.serverSideEncryptionKey().isEmpty()) {
+                    objectMetadata.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
+                } else {
+                    objectMetadata.setSSEAlgorithm(SSEAlgorithm.KMS.getAlgorithm());
+                    request.withSSEAwsKeyManagementParams(blobStore.getSSEAwsKey());
+                }
+                request.setNewObjectMetadata(objectMetadata);
             }
 
             SocketAccess.doPrivilegedVoid(() -> {
