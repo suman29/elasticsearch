@@ -20,8 +20,6 @@
 package org.elasticsearch.repositories.s3;
 
 import com.amazonaws.AmazonClientException;
-import com.amazonaws.SDKGlobalConfiguration;
-import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
@@ -34,7 +32,6 @@ import com.amazonaws.services.s3.model.SSEAwsKeyManagementParams;
 import com.amazonaws.services.s3.model.UploadPartRequest;
 import com.amazonaws.services.s3.model.UploadPartResult;
 import org.apache.logging.log4j.Logger;
-import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.unit.ByteSizeUnit;
 import org.elasticsearch.common.unit.ByteSizeValue;
@@ -62,10 +59,6 @@ import java.util.List;
  * See http://docs.aws.amazon.com/AmazonS3/latest/dev/uploadobjusingmpu.html
  */
 
-/**
- * Set system property ENFORCE_S3_SIGV4_SYSTEM_PROPERTY to true
- */
-@SuppressForbidden(reason = "This guarantees that the more secure authentication protocol will be used")
 class DefaultS3OutputStream extends S3OutputStream {
 
     private static final ByteSizeValue MULTIPART_MAX_SIZE = new ByteSizeValue(5, ByteSizeUnit.GB);
@@ -134,15 +127,9 @@ class DefaultS3OutputStream extends S3OutputStream {
             if (blobStore.serverSideEncryptionKey().isEmpty()) {
                 md.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
             } else {
-                /** This guarantees that the more secure authentication protocol will
-                 *  be used, but will cause authentication failures in code that
-                 *  accesses buckets in regions other than US Standard without explicitly
-                 *  configuring a region. **/
-                System.setProperty(SDKGlobalConfiguration.ENFORCE_S3_SIGV4_SYSTEM_PROPERTY, "true");
                 putRequest.setSSEAwsKeyManagementParams(new SSEAwsKeyManagementParams(blobStore.serverSideEncryptionKey()));
             }
         }
-        s3Client.setRegion(Regions.getCurrentRegion());
         s3Client.putObject(putRequest);
     }
 
@@ -169,17 +156,10 @@ class DefaultS3OutputStream extends S3OutputStream {
             if (blobStore.serverSideEncryptionKey().isEmpty()) {
                 md.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
             } else {
-                /** This guarantees that the more secure authentication protocol will
-                 *  be used, but will cause authentication failures in code that
-                 *  accesses buckets in regions other than US Standard without explicitly
-                 *  configuring a region. **/
-                System.setProperty(SDKGlobalConfiguration.ENFORCE_S3_SIGV4_SYSTEM_PROPERTY, "true");
                 request.setSSEAwsKeyManagementParams(new SSEAwsKeyManagementParams(blobStore.serverSideEncryptionKey()));
             }
             request.setObjectMetadata(md);
         }
-
-        s3Client.setRegion(Regions.getCurrentRegion());
         return s3Client.initiateMultipartUpload(request).getUploadId();
     }
 
